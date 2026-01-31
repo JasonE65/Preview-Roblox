@@ -101,7 +101,9 @@ end
 
 return ReplayBuffer
 
+
 -- GHOST CONTROLLER -- 
+
 
 --[[
 GhostController Module
@@ -112,6 +114,7 @@ It shows where the player was at a specific frame
 ]]
 
 local Players = game:GetService("Players")
+local PhysicsService = game:GetService("PhysicsService")
 local Config = require(script.Parent.Config)
 
 local GhostController = {}
@@ -135,13 +138,11 @@ function GhostController:_createModel(rootCFrame)
 	local character = Players.LocalPlayer.Character
 	if not character then return end
 
-
 	local wasArchivable = character.Archivable
 	character.Archivable = true
 
 	self.model = character:Clone()
-	
-	
+
 	character.Archivable = wasArchivable
 
 	if not self.model then return end
@@ -157,28 +158,51 @@ function GhostController:_createModel(rootCFrame)
 
 	-- Find the HRP returns if it doesnt find it
 	self.rootPart = self.model:FindFirstChild("HumanoidRootPart")
-	if not self.rootPart then 
+	if not self.rootPart then
 		self.model:Destroy()
 		self.model = nil
-		return 
+		return
 	end
+
+	self.model.PrimaryPart = self.rootPart
+	
+	
+	-- Creates and configures an collision group for the ghost so it wont collide with the player or the World.
+	local ghostGroupName = "ReplayGhost"
+	pcall(function()
+		PhysicsService:RegisterCollisionGroup(ghostGroupName)
+	end)
+	pcall(function()
+		PhysicsService:CollisionGroupSetCollidable(ghostGroupName, "Default", false)
+	end)
+	pcall(function()
+		PhysicsService:CollisionGroupSetCollidable(ghostGroupName, "Players", false)
+	end)
 
 	-- Makes all parts transparent and removes collisions
 	for _, part in pairs(self.model:GetDescendants()) do
 		if part:IsA("BasePart") then
 			part.Transparency = Config.GHOST_TRANSPARENCY
 			part.CanCollide = false
+			part.CanQuery = false      
+			part.CanTouch = false      
+			part.Anchored = true
+			part.Massless = true
+			pcall(function()
+				part.CollisionGroup = ghostGroupName
+			end)
 		end
 	end
-	
-	-- Disable animations
+
+	-- Disable humanoid completely
 	local humanoid = self.model:FindFirstChild("Humanoid")
 	if humanoid then
 		humanoid.PlatformStand = true
+		humanoid:ChangeState(Enum.HumanoidStateType.Physics)  -- Deactivtes Physics
+		humanoid:Destroy()
 	end
 
-
-	self.rootPart.Anchored = true
+	self.model:PivotTo(rootCFrame)
 
 	self.model.Parent = workspace
 end
@@ -195,10 +219,10 @@ function GhostController:update()
 	if not self.rootPart then return end
 	if not self.targetCFrame then return end
 
-	local currentCFrame = self.rootPart.CFrame
+	local currentCFrame = self.model:GetPivot()
 	local newCFrame = currentCFrame:Lerp(self.targetCFrame, Config.LERP_SPEED)
 
-	self.rootPart.CFrame = newCFrame
+	self.model:PivotTo(newCFrame)
 end
 
 -- Deletes the ghost and cleans up
